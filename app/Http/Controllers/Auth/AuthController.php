@@ -25,11 +25,41 @@ class AuthController extends Controller
     public function login(LoginFormRequest $request){
         $credentials = $request->only('email', 'password');
 
-        if (Auth::attempt($credentials)) {
-            $request->session()->regenerate();
+        $user = User::where('email', '=', $credentials['email'])->first();
+        if (!is_null($user)){
 
-            return redirect('home')->with('login_success', 'ログインに成功しました。');
+            if ($user->locked_flg === 1){
+                return back()->withErrors([
+                    'login_error' => 'アカウントがロックされています。',
+                ]);
+            }
+
+            if (Auth::attempt($credentials)) {
+                $request->session()->regenerate();
+
+                if ($user->error_count > 0){
+                    $user->error_count = 0;
+                    $user->save();
+                }
+
+                return redirect('home')->with('login_success', 'ログインに成功しました。');
+             }
+
+             $user->error_count = ($user->error_count + 1);
+             if ($user->error_count > 5){
+                $user->locked_flg = 1;
+
+                $user->save();
+
+                return back()->withErrors([
+                    'login_error' => 'アカウントがロックされました。',
+                ]);
+            }
+
+            $user->save();
+            
         }
+
 
         return back()->withErrors([
             'login_error' => 'メールアドレスかパスワードが間違っています。',
